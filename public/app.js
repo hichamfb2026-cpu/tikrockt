@@ -341,16 +341,14 @@ function initTikTokSimulator() {
 }
 
 function addPassengerToRocket(name) {
-    // دالة افتراضية لإضافة الراكب للموقع
-    const tickets = document.getElementById('tickets');
-    const ticket = document.createElement('div');
-    ticket.className = 'ticket';
-    ticket.innerText = name;
-    tickets.appendChild(ticket);
-    
-    // تحديث العداد
-    const countEl = document.getElementById('count');
-    countEl.innerText = parseInt(countEl.innerText || 0) + 1;
+    // تحديث البيانات
+    const p = {
+        id: 'user-' + Math.random(),
+        name: name,
+        avatar: '',
+        order: participants.length + 1
+    };
+    addTicket(p);
 }
 
 initTikTokSimulator();
