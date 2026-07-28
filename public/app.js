@@ -321,15 +321,36 @@ function initTikTokSimulator() {
     // منطق إضافة الرسائل
     const chatBox = document.getElementById('chat-box');
     const chatInput = document.getElementById('chat-input');
+    
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && chatInput.value.trim() !== '') {
+            const val = chatInput.value.trim();
             const msg = document.createElement('div');
-            msg.innerText = `المستخدم: ${chatInput.value}`;
+            msg.innerText = `المشاهد: ${val}`;
             chatBox.appendChild(msg);
-            chatInput.value = '';
             chatBox.scrollTop = chatBox.scrollHeight;
+
+            // إذا كتب المشاهد "دخول"، نضيفه للموقع
+            if (val === 'دخول') {
+                addPassengerToRocket('مشاهد-' + Math.floor(Math.random() * 1000));
+            }
+            
+            chatInput.value = '';
         }
     });
+}
+
+function addPassengerToRocket(name) {
+    // دالة افتراضية لإضافة الراكب للموقع
+    const tickets = document.getElementById('tickets');
+    const ticket = document.createElement('div');
+    ticket.className = 'ticket';
+    ticket.innerText = name;
+    tickets.appendChild(ticket);
+    
+    // تحديث العداد
+    const countEl = document.getElementById('count');
+    countEl.innerText = parseInt(countEl.innerText || 0) + 1;
 }
 
 initTikTokSimulator();
