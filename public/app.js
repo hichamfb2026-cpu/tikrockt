@@ -7,6 +7,7 @@ const el = {
   stageMain: $('stage-main'),
   stageWinner: $('stage-winner'),
   username: $('username'),
+  accounts: $('accounts'),
   keyword: $('keyword'),
   emptyKeyword: $('empty-keyword'),
   exclude: $('exclude'),
@@ -25,6 +26,7 @@ const el = {
   wName: $('w-name'),
   wHandle: $('w-handle'),
   btnStart: $('btn-start'),
+  btnCheck: $('btn-check'),
   btnStop: $('btn-stop'),
   btnClear: $('btn-clear'),
   btnDraw: $('btn-draw'),
@@ -101,6 +103,30 @@ function renderHistory(list) {
     li.append(rank, name);
     return li;
   }));
+}
+
+function renderAccounts(list) {
+  if (!list || list.length === 0) { el.accounts.hidden = true; return; }
+  el.accounts.hidden = false;
+  el.accounts.replaceChildren(...list.map((name) => {
+    const btn = document.createElement('button');
+    btn.className = 'acct';
+    btn.textContent = '@' + name;
+    btn.dataset.name = name;
+    btn.addEventListener('click', () => {
+      el.username.value = name;
+      markActiveAccount();
+    });
+    return btn;
+  }));
+  markActiveAccount();
+}
+
+function markActiveAccount() {
+  const current = el.username.value.trim().toLowerCase();
+  el.accounts.querySelectorAll('.acct').forEach((b) => {
+    b.classList.toggle('is-on', b.dataset.name.toLowerCase() === current);
+  });
 }
 
 function addLog(level, message) {
@@ -254,6 +280,7 @@ socket.on('state', (s) => {
   el.emptyKeyword.textContent = s.keyword;
   el.exclude.checked = s.excludeWinners;
   el.username.value = s.username || '';
+  renderAccounts(s.accounts);
   document.querySelectorAll('.seg').forEach((b) => {
     const on = b.dataset.mode === s.matchMode;
     b.classList.toggle('is-on', on);
@@ -279,7 +306,13 @@ function applyStatus(s) {
   const live = s.status === 'connected' || s.status === 'connecting';
   el.btnStart.disabled = live;
   el.btnStop.disabled = !live;
+  el.btnCheck.disabled = live;
   el.btnStart.textContent = s.status === 'connecting' ? 'جارٍ الاتصال…' : 'تشغيل الاتصال';
+  // مزامنة الاسم مع النوافذ الأخرى، إلا إذا كان المستخدم يكتب فيه الآن
+  if (s.username && document.activeElement !== el.username) {
+    el.username.value = s.username;
+    markActiveAccount();
+  }
 }
 
 socket.on('participant:add', (p) => {
@@ -333,6 +366,10 @@ el.btnStart.addEventListener('click', () => {
   }
   socket.emit('start', { username: value });
 });
+el.btnCheck.addEventListener('click', () => {
+  socket.emit('check', { username: el.username.value });
+});
+
 el.username.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !el.btnStart.disabled) el.btnStart.click();
 });
@@ -385,6 +422,7 @@ document.addEventListener('keydown', (e) => {
 
 /* تلميح وضع التجربة */
 el.username.addEventListener('input', () => {
+  markActiveAccount();
   if (el.btnStart.disabled) return;
   el.btnStart.textContent = el.username.value.trim().toLowerCase() === 'demo'
     ? 'إضافة مشاركين تجريبيين'
