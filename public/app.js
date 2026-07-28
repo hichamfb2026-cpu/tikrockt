@@ -309,9 +309,27 @@ loginBtn.addEventListener('click', () => {
 function initTikTokSimulator() {
     const sim = document.createElement('div');
     sim.id = 'tiktok-sim';
-    sim.style = 'position:fixed; top:20px; right:20px; width:300px; height:500px; background:#000; color:#fff; border:2px solid #333; z-index:999; padding:10px; border-radius:10px;';
-    sim.innerHTML = '<h3>محاكي تيك توك</h3><div id="video-placeholder" style="height:200px; background:#333; display:flex; align-items:center; justify-content:center;">الفيديو هنا</div><div style="margin-top:10px;">إعجاب، تعليق، مشاركة</div>';
+    sim.style = 'position:fixed; top:20px; right:20px; width:300px; height:500px; background:#111; color:#fff; border:2px solid #333; z-index:999; padding:10px; border-radius:10px; display:flex; flex-direction:column;';
+    sim.innerHTML = `
+        <h3>محاكي تيك توك</h3>
+        <div id="video-placeholder" style="height:150px; background:#333; display:flex; align-items:center; justify-content:center; margin-bottom:10px;">الفيديو</div>
+        <div id="chat-box" style="flex-grow:1; overflow-y:auto; border-top:1px solid #333; padding:5px; font-size:12px;"></div>
+        <input type="text" id="chat-input" placeholder="اكتب رسالة..." style="width:100%; margin-top:5px;"/>
+    `;
     document.body.appendChild(sim);
+
+    // منطق إضافة الرسائل
+    const chatBox = document.getElementById('chat-box');
+    const chatInput = document.getElementById('chat-input');
+    chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && chatInput.value.trim() !== '') {
+            const msg = document.createElement('div');
+            msg.innerText = `المستخدم: ${chatInput.value}`;
+            chatBox.appendChild(msg);
+            chatInput.value = '';
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    });
 }
 
 initTikTokSimulator();
