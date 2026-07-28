@@ -103,7 +103,7 @@ function fanfare() {
 
 function confetti() {
   if (reduceMotion) return;
-  const colors = ['#f5b841', '#35d0a5', '#ff4d6d', '#f5f1e6', '#a78bfa'];
+  const colors = ['#33e1ff', '#7c5cff', '#ffd166', '#ff6a3d', '#eaf1ff'];
   const pieces = document.createDocumentFragment();
   for (let i = 0; i < 80; i += 1) {
     const bit = document.createElement('i');
