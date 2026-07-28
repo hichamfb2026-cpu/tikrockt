@@ -11,6 +11,27 @@ const { TikTokLiveConnection, WebcastEvent, ControlEvent } = require('tiktok-liv
 const PORT = process.env.PORT || 3000;
 const SIGN_API_KEY = process.env.SIGN_API_KEY || undefined;
 
+/* ══════════════════════════════════════════════════════════════
+   ★★★  إعداداتك — عدّل هنا فقط  ★★★
+
+   ضع حسابك (أو حساباتك) بين علامتَي التنصيص، وكل حساب في سطر.
+   الحساب الأول هو المربوط تلقائيًا عند فتح الموقع،
+   والباقي يظهرون كأزرار سريعة في لوحة التحكم تضغط عليها للتبديل.
+
+   بدون علامة @ — فقط اسم المستخدم.
+   ══════════════════════════════════════════════════════════════ */
+
+const ACCOUNTS = [
+  'xxdreemB52',
+  // 'حساب_ثاني',
+  // 'حساب_ثالث',
+];
+
+// كلمة الدخول الافتراضية (تقدر تغيّرها من اللوحة أيضًا)
+const DEFAULT_KEYWORD = 'دخول';
+
+/* ══════════════ نهاية الإعدادات ══════════════ */
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
@@ -23,9 +44,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const state = {
   status: 'disconnected',      // disconnected | connecting | connected | error
-  username: '',
+  username: ACCOUNTS[0] || '',  // الحساب المربوط تلقائيًا
   statusDetail: 'غير متصل',
-  keyword: 'دخول',
+  keyword: DEFAULT_KEYWORD,
   matchMode: 'exact',          // exact | contains
   excludeWinners: true,
   participants: new Map(),     // userId -> participant
@@ -73,6 +94,7 @@ function snapshot() {
     status: state.status,
     statusDetail: state.statusDetail,
     username: state.username,
+    accounts: ACCOUNTS,
     keyword: state.keyword,
     matchMode: state.matchMode,
     excludeWinners: state.excludeWinners,
@@ -189,6 +211,38 @@ function describeConnectError(err, username) {
     return 'تعذّر الاتصال: تجاوزت حد خدمة التوقيع المجانية. انتظر دقيقة وأعد المحاولة، أو أضف SIGN_API_KEY في ملف .env';
   }
   return `تعذّر الاتصال: ${msg}`;
+}
+
+/* ---------------------------------------------------------------
+   التحقق من الحساب قبل الاتصال — يوضّح سبب فشل الربط بدقة
+--------------------------------------------------------------- */
+
+async function checkAccount(rawUsername) {
+  const username = String(rawUsername || '').trim().replace(/^@/, '');
+  if (!username) {
+    log('error', 'اكتب اسم المستخدم أولًا.');
+    return;
+  }
+
+  log('info', `جارٍ التحقق من @${username} …`);
+  try {
+    const probe = new TikTokLiveConnection(username, { signApiKey: SIGN_API_KEY });
+    const live = await probe.fetchIsLive();
+    if (live) {
+      log('ok', `@${username} على الهواء الآن. اضغط «تشغيل الاتصال».`);
+    } else {
+      log('warn', `الاسم @${username} صحيح، لكن الحساب ليس على الهواء حاليًا.`);
+    }
+  } catch (err) {
+    const msg = String(err?.message || err || '');
+    if (/sign|rate.?limit|429|euler/i.test(msg)) {
+      log('error', 'تعذّر التحقق: تجاوزت حد خدمة التوقيع المجانية. انتظر دقيقة وأعد المحاولة.');
+    } else if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|fetch failed|network/i.test(msg)) {
+      log('error', 'تعذّر التحقق: لا يوجد اتصال بالإنترنت من الخادم.');
+    } else {
+      log('warn', `تعذّر قراءة حالة @${username}. الأسباب المحتملة: الاسم مكتوب خطأ، أو الحساب ليس على الهواء، أو تيك توك يحجب الاتصال من هذا الجهاز.`);
+    }
+  }
 }
 
 function teardown(nextStatus) {
@@ -322,6 +376,7 @@ io.on('connection', (socket) => {
   socket.emit('state', snapshot());
 
   socket.on('start', (payload) => startConnection(payload?.username));
+  socket.on('check', (payload) => checkAccount(payload?.username));
   socket.on('stop', () => stopConnection());
   socket.on('clear', () => clearParticipants());
   socket.on('draw', () => pickWinner());
