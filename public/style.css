@@ -59,6 +59,7 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   grid-template-columns: 340px 1fr;
   height: 100vh;
 }
+.stage[hidden] { display: none; }
 
 /* ═══ الشريط الجانبي ═══ */
 
@@ -554,6 +555,7 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   z-index: 20;
   animation: fade-up .34s ease both;
 }
+.winner-stage[hidden] { display: none; }
 @keyframes fade-up { from { opacity: 0; transform: translateY(10px); } }
 
 .winner-card {
