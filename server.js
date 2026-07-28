@@ -57,6 +57,28 @@ const state = {
 };
 
 let connection = null;
+let reconnectTimer = null;
+let autoReconnect = false;          // مفعّل تلقائيًا عند الربط بحساب من ACCOUNTS
+const RECONNECT_DELAY_MS = 20_000;  // كل 20 ثانية يعيد المحاولة حتى يجد البث شغّالاً
+
+function scheduleReconnect(username) {
+  if (!autoReconnect || reconnectTimer) return;
+  state.statusDetail = `سيُعاد المحاولة تلقائيًا خلال ${RECONNECT_DELAY_MS / 1000} ثانية…`;
+  pushStatus();
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    if (!autoReconnect) return;
+    startConnection(username);
+  }, RECONNECT_DELAY_MS);
+}
+
+function cancelReconnect() {
+  autoReconnect = false;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
 
 /* ---------------------------------------------------------------
    تطبيع النص العربي حتى تُقبل كل صيغ الكلمة المفتاحية
@@ -162,7 +184,7 @@ async function startConnection(rawUsername) {
   pushStatus();
 
   connection = new TikTokLiveConnection(username, {
-    signApiKey: SIGN_API_KEY=mgm2ce1hbycfo8qn,
+    signApiKey: SIGN_API_KEY,
     processInitialData: false,      // تجاهل الرسائل القديمة المخزّنة
     fetchRoomInfoOnConnect: true,
     enableExtendedGiftInfo: false,
@@ -174,6 +196,10 @@ async function startConnection(rawUsername) {
     state.statusDetail = 'انتهى البث';
     log('warn', 'انتهى البث المباشر.');
     teardown('disconnected');
+    if (autoReconnect) {
+      log('info', `سيُعاد الاتصال تلقائيًا بـ @${username} حال بدء بث جديد.`);
+      scheduleReconnect(username);
+    }
   });
 
   connection.on(ControlEvent.DISCONNECTED, () => {
@@ -181,6 +207,7 @@ async function startConnection(rawUsername) {
     state.statusDetail = 'انقطع الاتصال';
     log('warn', 'انقطع الاتصال بالبث.');
     teardown('disconnected');
+    if (autoReconnect) scheduleReconnect(username);
   });
 
   connection.on(ControlEvent.ERROR, (err) => {
@@ -199,6 +226,10 @@ async function startConnection(rawUsername) {
     pushStatus();
     log('error', describeConnectError(err, username));
     connection = null;
+    if (autoReconnect) {
+      log('info', `سيُعاد الاتصال تلقائيًا بـ @${username} كل ${RECONNECT_DELAY_MS / 1000} ثانية حتى يبدأ البث.`);
+      scheduleReconnect(username);
+    }
   }
 }
 
@@ -255,6 +286,7 @@ function teardown(nextStatus) {
 }
 
 function stopConnection() {
+  cancelReconnect();               // إيقاف يدوي = لا إعادة محاولة تلقائية
   if (!connection) {
     log('info', 'لا يوجد اتصال قائم.');
     state.status = 'disconnected';
@@ -375,7 +407,10 @@ app.get('/api/participants.csv', (req, res) => {
 io.on('connection', (socket) => {
   socket.emit('state', snapshot());
 
-  socket.on('start', (payload) => startConnection(payload?.username));
+  socket.on('start', (payload) => {
+    autoReconnect = true;   // أي تشغيل (تلقائي أو يدوي) يبقى يعيد المحاولة حتى الإيقاف اليدوي
+    startConnection(payload?.username);
+  });
   socket.on('check', (payload) => checkAccount(payload?.username));
   socket.on('stop', () => stopConnection());
   socket.on('clear', () => clearParticipants());
@@ -430,4 +465,12 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, () => {
   console.log(`\n  سحب تيك توك يعمل على  →  http://localhost:${PORT}\n`);
+
+  // ربط تلقائي بالحساب الأول في ACCOUNTS فور تشغيل السيرفر،
+  // مع إعادة محاولة تلقائية مستمرة حتى يبدأ البث (بدون أي ضغط زر)
+  if (ACCOUNTS[0]) {
+    autoReconnect = true;
+    log('info', `جارٍ الاتصال التلقائي بـ @${ACCOUNTS[0]} …`);
+    startConnection(ACCOUNTS[0]);
+  }
 });
