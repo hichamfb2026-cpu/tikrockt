@@ -162,7 +162,7 @@ async function startConnection(rawUsername) {
   pushStatus();
 
   connection = new TikTokLiveConnection(username, {
-    signApiKey: SIGN_API_KEY=mgm2ce1hbycfo8qn,
+    signApiKey: SIGN_API_KEY,
     processInitialData: false,      // تجاهل الرسائل القديمة المخزّنة
     fetchRoomInfoOnConnect: true,
     enableExtendedGiftInfo: false,
