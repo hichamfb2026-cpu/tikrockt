@@ -6,38 +6,24 @@ const $ = (id) => document.getElementById(id);
 const el = {
   stageMain: $('stage-main'),
   stageWinner: $('stage-winner'),
-  username: $('username'),
-  accounts: $('accounts'),
-  keyword: $('keyword'),
-  emptyKeyword: $('empty-keyword'),
-  exclude: $('exclude'),
-  sound: $('sound'),
-  status: $('status'),
-  statusText: document.querySelector('.status__text'),
   count: $('count'),
   tickets: $('tickets'),
   empty: $('empty'),
-  history: $('history'),
-  log: $('log'),
   confetti: $('confetti'),
   thread: $('thread'),
   threadWait: $('thread-wait'),
   wAvatar: $('w-avatar'),
   wName: $('w-name'),
   wHandle: $('w-handle'),
-  btnStart: $('btn-start'),
-  btnCheck: $('btn-check'),
-  btnStop: $('btn-stop'),
-  btnClear: $('btn-clear'),
   btnDraw: $('btn-draw'),
   btnRedraw: $('btn-redraw'),
   btnBack: $('btn-back'),
-  btnHistoryClear: $('btn-history-clear'),
 };
 
 let participants = [];
 let drawing = false;
 let pendingParticipants = null;
+let soundOn = true; /* لا توجد لوحة تحكم بعد الآن؛ المؤثر الصوتي مفعّل افتراضيًا */
 
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const arabicNumber = (n) => Number(n).toLocaleString('ar-EG');
@@ -88,60 +74,11 @@ function refreshCounter() {
   el.btnDraw.disabled = participants.length === 0 || drawing;
 }
 
-function renderHistory(list) {
-  if (!list || list.length === 0) {
-    el.history.innerHTML = '<li class="history__empty">لا فائزين بعد.</li>';
-    return;
-  }
-  el.history.replaceChildren(...list.map((h, i) => {
-    const li = document.createElement('li');
-    const rank = document.createElement('span');
-    rank.className = 'history__rank';
-    rank.textContent = String(i + 1).padStart(2, '0');
-    const name = document.createElement('span');
-    name.textContent = h.name;
-    li.append(rank, name);
-    return li;
-  }));
-}
-
-function renderAccounts(list) {
-  if (!list || list.length === 0) { el.accounts.hidden = true; return; }
-  el.accounts.hidden = false;
-  el.accounts.replaceChildren(...list.map((name) => {
-    const btn = document.createElement('button');
-    btn.className = 'acct';
-    btn.textContent = '@' + name;
-    btn.dataset.name = name;
-    btn.addEventListener('click', () => {
-      el.username.value = name;
-      markActiveAccount();
-    });
-    return btn;
-  }));
-  markActiveAccount();
-}
-
-function markActiveAccount() {
-  const current = el.username.value.trim().toLowerCase();
-  el.accounts.querySelectorAll('.acct').forEach((b) => {
-    b.classList.toggle('is-on', b.dataset.name.toLowerCase() === current);
-  });
-}
-
-function addLog(level, message) {
-  const p = document.createElement('p');
-  p.className = level;
-  p.textContent = message;
-  el.log.prepend(p);
-  while (el.log.childElementCount > 30) el.log.lastElementChild.remove();
-}
-
 /* ═══════════ الصوت ═══════════ */
 
 let audioCtx = null;
 function tone(freq, duration, type = 'sine', gain = 0.05) {
-  if (!el.sound.checked) return;
+  if (!soundOn) return;
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -200,7 +137,6 @@ function runDraw(winner) {
 
   const hop = () => {
     nodes.forEach((n) => n.classList.remove('is-spot'));
-    // الخطوات الأخيرة تُوجَّه نحو التذكرة الفائزة
     const remaining = totalSteps - step;
     const node = remaining <= 1 ? target : nodes[(startIndex + step) % nodes.length];
     node.classList.add('is-spot');
@@ -213,7 +149,7 @@ function runDraw(winner) {
       finishDraw(winner, target);
       return;
     }
-    const progress = step / totalSteps;          // تباطؤ تدريجي حتى التوقف
+    const progress = step / totalSteps;
     setTimeout(hop, 55 + progress * progress * 320);
   };
 
@@ -276,19 +212,7 @@ function addBubble(message) {
 
 socket.on('state', (s) => {
   participants = s.participants || [];
-  el.keyword.value = s.keyword;
-  el.emptyKeyword.textContent = s.keyword;
-  el.exclude.checked = s.excludeWinners;
-  el.username.value = s.username || '';
-  renderAccounts(s.accounts);
-  document.querySelectorAll('.seg').forEach((b) => {
-    const on = b.dataset.mode === s.matchMode;
-    b.classList.toggle('is-on', on);
-    b.setAttribute('aria-checked', String(on));
-  });
-  applyStatus(s);
   renderAll();
-  renderHistory(s.history);
 
   if (s.winner) {
     showWinner(s.winner);
@@ -298,25 +222,8 @@ socket.on('state', (s) => {
   }
 });
 
-socket.on('status', applyStatus);
-
-function applyStatus(s) {
-  el.status.dataset.state = s.status;
-  el.statusText.textContent = s.statusDetail || 'غير متصل';
-  const live = s.status === 'connected' || s.status === 'connecting';
-  el.btnStart.disabled = live;
-  el.btnStop.disabled = !live;
-  el.btnCheck.disabled = live;
-  el.btnStart.textContent = s.status === 'connecting' ? 'جارٍ الاتصال…' : 'تشغيل الاتصال';
-  // مزامنة الاسم مع النوافذ الأخرى، إلا إذا كان المستخدم يكتب فيه الآن
-  if (s.username && document.activeElement !== el.username) {
-    el.username.value = s.username;
-    markActiveAccount();
-  }
-}
-
 socket.on('participant:add', (p) => {
-  if (drawing) return;                     // لا نغيّر الشبكة أثناء الحركة
+  if (drawing) return;
   if (participants.some((x) => x.id === p.id)) return;
   addTicket(p);
 });
@@ -326,60 +233,20 @@ socket.on('participants:clear', () => {
   renderAll();
 });
 
-socket.on('winner', ({ winner, history, participants: list }) => {
+socket.on('winner', ({ winner, participants: list }) => {
   pendingParticipants = list;
-  renderHistory(history);
   runDraw(winner);
 });
 
 socket.on('draw:empty', () => {
   drawing = false;
   refreshCounter();
-  addLog('warn', 'لا يوجد مشاركون للسحب.');
 });
 
 socket.on('winner:clear', showList);
 socket.on('winner:message', addBubble);
-socket.on('history:clear', () => renderHistory([]));
-
-socket.on('settings', (s) => {
-  el.keyword.value = s.keyword;
-  el.emptyKeyword.textContent = s.keyword;
-  el.exclude.checked = s.excludeWinners;
-});
-
-socket.on('log', ({ level, message }) => addLog(level, message));
-
-socket.on('disconnect', () => {
-  el.status.dataset.state = 'error';
-  el.statusText.textContent = 'انقطع الاتصال بالخادم';
-});
 
 /* ═══════════ تفاعل المستخدم ═══════════ */
-
-el.btnStart.addEventListener('click', () => {
-  const value = el.username.value.trim();
-  // وضع التجربة: اكتب demo لتوليد مشاركين وهميين بدون بث حقيقي
-  if (value.toLowerCase() === 'demo') {
-    socket.emit('demo', { count: 14 });
-    return;
-  }
-  socket.emit('start', { username: value });
-});
-el.btnCheck.addEventListener('click', () => {
-  socket.emit('check', { username: el.username.value });
-});
-
-el.username.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !el.btnStart.disabled) el.btnStart.click();
-});
-
-el.btnStop.addEventListener('click', () => socket.emit('stop'));
-
-el.btnClear.addEventListener('click', () => {
-  if (participants.length && !confirm('مسح كل المشاركين الحاليين؟')) return;
-  socket.emit('clear');
-});
 
 function requestDraw() {
   if (drawing) return;
@@ -395,48 +262,16 @@ el.btnRedraw.addEventListener('click', () => {
   setTimeout(requestDraw, 220);
 });
 
-/* ═══ الإصلاح: زر "رجوع للقائمة" كان يعتمد بالكامل على رد السيرفر
-   (حدث winner:clear). لو السيرفر ما أرسل الحدث (لأي سبب: حالة الفائز
-   محفوظة عنده ولم تُمسح، أو الحدث "back" غير مُنفَّذ هناك)، تظل الشاشة
-   عالقة للأبد ولا يقدر المستخدم يقفلها.
-   الحل: نخفي الشاشة محليًا فورًا (بدون انتظار السيرفر)، ثم نبلغ
-   السيرفر بالحدث لتحديث حالته أيضًا. ═══ */
 el.btnBack.addEventListener('click', () => {
-  showList();            // إغلاق فوري من طرف المتصفح
-  socket.emit('back');   // إبلاغ السيرفر (اختياري الآن، لا نعتمد عليه)
+  showList();
+  socket.emit('back');
 });
 
-el.keyword.addEventListener('change', () => {
-  socket.emit('settings', { keyword: el.keyword.value });
-});
-
-el.exclude.addEventListener('change', () => {
-  socket.emit('settings', { excludeWinners: el.exclude.checked });
-});
-
-document.querySelectorAll('.seg').forEach((btn) => {
-  btn.addEventListener('click', () => socket.emit('settings', { matchMode: btn.dataset.mode }));
-});
-
-el.btnHistoryClear.addEventListener('click', () => {
-  if (confirm('مسح سجل الفائزين وإعادة تأهيل الجميع للسحب؟')) socket.emit('history:clear');
-});
-
-/* اختصارات أثناء البث */
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   if (e.code === 'Space') { e.preventDefault(); if (!el.btnDraw.disabled) requestDraw(); }
   if (e.key === 'Escape' && !el.stageWinner.hidden) {
-    showList();          // إغلاق فوري بنفس منطق زر "رجوع" أعلاه
+    showList();
     socket.emit('back');
   }
-});
-
-/* تلميح وضع التجربة */
-el.username.addEventListener('input', () => {
-  markActiveAccount();
-  if (el.btnStart.disabled) return;
-  el.btnStart.textContent = el.username.value.trim().toLowerCase() === 'demo'
-    ? 'إضافة مشاركين تجريبيين'
-    : 'تشغيل الاتصال';
 });

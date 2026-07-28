@@ -56,7 +56,7 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 
 .stage {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 1fr;
   height: 100vh;
 }
 .stage[hidden] { display: none; }
@@ -713,7 +713,6 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 @media (max-width: 1000px) {
   body { overflow: auto; }
   .stage { grid-template-columns: 1fr; height: auto; }
-  .rail { border-inline-start: 0; border-bottom: 1px solid var(--line); }
   .wall { min-height: 70vh; }
   .winner-stage { padding: 18px; }
   .winner-card { flex-direction: column; align-items: stretch; text-align: center; }
