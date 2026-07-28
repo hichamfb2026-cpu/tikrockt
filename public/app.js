@@ -395,7 +395,16 @@ el.btnRedraw.addEventListener('click', () => {
   setTimeout(requestDraw, 220);
 });
 
-el.btnBack.addEventListener('click', () => socket.emit('back'));
+/* ═══ الإصلاح: زر "رجوع للقائمة" كان يعتمد بالكامل على رد السيرفر
+   (حدث winner:clear). لو السيرفر ما أرسل الحدث (لأي سبب: حالة الفائز
+   محفوظة عنده ولم تُمسح، أو الحدث "back" غير مُنفَّذ هناك)، تظل الشاشة
+   عالقة للأبد ولا يقدر المستخدم يقفلها.
+   الحل: نخفي الشاشة محليًا فورًا (بدون انتظار السيرفر)، ثم نبلغ
+   السيرفر بالحدث لتحديث حالته أيضًا. ═══ */
+el.btnBack.addEventListener('click', () => {
+  showList();            // إغلاق فوري من طرف المتصفح
+  socket.emit('back');   // إبلاغ السيرفر (اختياري الآن، لا نعتمد عليه)
+});
 
 el.keyword.addEventListener('change', () => {
   socket.emit('settings', { keyword: el.keyword.value });
@@ -417,7 +426,10 @@ el.btnHistoryClear.addEventListener('click', () => {
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   if (e.code === 'Space') { e.preventDefault(); if (!el.btnDraw.disabled) requestDraw(); }
-  if (e.key === 'Escape' && !el.stageWinner.hidden) socket.emit('back');
+  if (e.key === 'Escape' && !el.stageWinner.hidden) {
+    showList();          // إغلاق فوري بنفس منطق زر "رجوع" أعلاه
+    socket.emit('back');
+  }
 });
 
 /* تلميح وضع التجربة */
