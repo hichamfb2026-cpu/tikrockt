@@ -290,3 +290,28 @@ document.addEventListener('keydown', (e) => {
     socket.emit('back');
   }
 });
+
+// إضافة منطق تسجيل الدخول
+const loginScreen = $('login-screen');
+const loginBtn = $('login-btn');
+const usernameInput = $('username');
+
+loginBtn.addEventListener('click', () => {
+    if (usernameInput.value.trim()) {
+        loginScreen.style.display = 'none';
+        console.log(`تم تسجيل الدخول باسم: ${usernameInput.value}`);
+    } else {
+        alert('يرجى إدخال اسم المستخدم');
+    }
+});
+
+// محاكي واجهة تيك توك بسيط
+function initTikTokSimulator() {
+    const sim = document.createElement('div');
+    sim.id = 'tiktok-sim';
+    sim.style = 'position:fixed; top:20px; right:20px; width:300px; height:500px; background:#000; color:#fff; border:2px solid #333; z-index:999; padding:10px; border-radius:10px;';
+    sim.innerHTML = '<h3>محاكي تيك توك</h3><div id="video-placeholder" style="height:200px; background:#333; display:flex; align-items:center; justify-content:center;">الفيديو هنا</div><div style="margin-top:10px;">إعجاب، تعليق، مشاركة</div>';
+    document.body.appendChild(sim);
+}
+
+initTikTokSimulator();

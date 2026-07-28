@@ -606,3 +606,39 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   }
   .stars-trail, .starfield { display: none; }
 }
+
+/* شاشة تسجيل الدخول */
+.login-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--space-1);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+.login-box {
+  background: var(--space-2);
+  padding: 2rem;
+  border-radius: 1rem;
+  text-align: center;
+  border: 1px solid var(--line);
+}
+.login-box input {
+  display: block;
+  width: 100%;
+  padding: 0.5rem;
+  margin: 1rem 0;
+  background: var(--space-3);
+  color: white;
+  border: 1px solid var(--line);
+}
+.login-box button {
+  padding: 0.5rem 2rem;
+  background: var(--neon);
+  border: none;
+  cursor: pointer;
+}
