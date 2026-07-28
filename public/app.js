@@ -208,11 +208,26 @@ function addBubble(message) {
   while (el.thread.childElementCount > 200) el.thread.firstElementChild.remove();
 }
 
+/* ═══════════ حالة الاتصال ═══════════ */
+
+const connBadge = $('conn-badge');
+const connText = $('conn-text');
+
+function updateConn(status, statusDetail) {
+  if (connText) connText.textContent = statusDetail || '—';
+  if (!connBadge) return;
+  connBadge.classList.remove('is-connecting', 'is-connected', 'is-error', 'is-disconnected');
+  connBadge.classList.add(`is-${status || 'disconnected'}`);
+}
+
+socket.on('status', (s) => updateConn(s.status, s.statusDetail));
+
 /* ═══════════ أحداث الخادم ═══════════ */
 
 socket.on('state', (s) => {
   participants = s.participants || [];
   renderAll();
+  updateConn(s.status, s.statusDetail);
 
   if (s.winner) {
     showWinner(s.winner);

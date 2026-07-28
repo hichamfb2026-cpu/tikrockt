@@ -22,7 +22,7 @@ const SIGN_API_KEY = process.env.SIGN_API_KEY || undefined;
    ══════════════════════════════════════════════════════════════ */
 
 const ACCOUNTS = [
-  'xxdreemB52',
+  'xxdreemb52',
   // 'حساب_ثاني',
   // 'حساب_ثالث',
 ];
@@ -57,6 +57,10 @@ const state = {
 };
 
 let connection = null;
+let autoReconnect = true;   // نحاول نعاود الاتصال تلقائيًا لو انقطع أو فشل
+let reconnectTimer = null;
+let reconnectDelay = 5000;  // يتضاعف عند الفشل المتكرر (حماية من تجاوز حد التوقيع)
+const MAX_RECONNECT_DELAY = 60000;
 
 /* ---------------------------------------------------------------
    تطبيع النص العربي حتى تُقبل كل صيغ الكلمة المفتاحية
@@ -156,6 +160,7 @@ async function startConnection(rawUsername) {
     return;
   }
 
+  autoReconnect = true;
   state.username = username;
   state.status = 'connecting';
   state.statusDetail = 'جارٍ الاتصال…';
@@ -174,6 +179,7 @@ async function startConnection(rawUsername) {
     state.statusDetail = 'انتهى البث';
     log('warn', 'انتهى البث المباشر.');
     teardown('disconnected');
+    scheduleReconnect(username);
   });
 
   connection.on(ControlEvent.DISCONNECTED, () => {
@@ -181,6 +187,7 @@ async function startConnection(rawUsername) {
     state.statusDetail = 'انقطع الاتصال';
     log('warn', 'انقطع الاتصال بالبث.');
     teardown('disconnected');
+    scheduleReconnect(username);
   });
 
   connection.on(ControlEvent.ERROR, (err) => {
@@ -193,13 +200,32 @@ async function startConnection(rawUsername) {
     state.statusDetail = `متصل بـ @${username}`;
     pushStatus();
     log('ok', `تم الاتصال ببث @${username}. الكلمة المفتاحية: «${state.keyword}»`);
+    reconnectDelay = 5000; // نجح الاتصال، نصفّر مدة الانتظار القادمة
   } catch (err) {
     state.status = 'error';
     state.statusDetail = 'فشل الاتصال';
     pushStatus();
     log('error', describeConnectError(err, username));
     connection = null;
+    scheduleReconnect(username);
   }
+}
+
+/* ---------------------------------------------------------------
+   إعادة المحاولة تلقائيًا (بمهلة متصاعدة) بدل انتظار ضغطة يدوية
+--------------------------------------------------------------- */
+
+function scheduleReconnect(username) {
+  if (!autoReconnect || !username) return;
+  clearTimeout(reconnectTimer);
+  const delay = reconnectDelay;
+  reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
+  log('info', `سأحاول الاتصال بـ @${username} مرة أخرى خلال ${Math.round(delay / 1000)} ثانية…`);
+  reconnectTimer = setTimeout(() => {
+    if (state.status === 'disconnected' || state.status === 'error') {
+      startConnection(username);
+    }
+  }, delay);
 }
 
 function describeConnectError(err, username) {
@@ -255,6 +281,8 @@ function teardown(nextStatus) {
 }
 
 function stopConnection() {
+  autoReconnect = false;       // إيقاف يدوي = لا نعاود المحاولة تلقائيًا
+  clearTimeout(reconnectTimer);
   if (!connection) {
     log('info', 'لا يوجد اتصال قائم.');
     state.status = 'disconnected';
@@ -430,4 +458,13 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, () => {
   console.log(`\n  سحب تيك توك يعمل على  →  http://localhost:${PORT}\n`);
+
+  // ★ الإصلاح الأساسي: الكود القديم كان يعرّف الحساب الأول كـ"مربوط تلقائيًا"
+  // لكنه لا يستدعي startConnection أبدًا إلا لو ضغطت زر في لوحة تحكم غير موجودة
+  // أصلًا في public/. لذلك لم تتصل السيرفر أبدًا ببث @xxdreemb52، وكل كتابة
+  // لكلمة «دخول» في الشات كانت تذهب لبث ما هو أصلًا غير مراقَب.
+  // الآن: نتصل تلقائيًا بالحساب الأول من ACCOUNTS فور تشغيل السيرفر.
+  if (ACCOUNTS[0]) {
+    startConnection(ACCOUNTS[0]);
+  }
 });
