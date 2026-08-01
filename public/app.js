@@ -1,6 +1,6 @@
 'use strict';
 
-const socket = io();
+let socket = null;
 const $ = (id) => document.getElementById(id);
 
 const el = {
@@ -18,7 +18,24 @@ const el = {
   btnDraw: $('btn-draw'),
   btnRedraw: $('btn-redraw'),
   btnBack: $('btn-back'),
+  loginScreen: $('login-screen'),
+  loginForm: $('login-form'),
+  loginBtn: $('login-btn'),
+  loginUsername: $('login-username'),
+  loginPassword: $('login-password'),
+  loginAlert: $('login-alert'),
 };
+
+const authState = {
+  authenticated: false,
+  username: '',
+};
+
+function setAppEnabled(enabled) {
+  el.btnDraw.disabled = !enabled || participants.length === 0 || drawing;
+  el.btnRedraw.disabled = !enabled;
+  el.btnBack.disabled = !enabled;
+}
 
 let participants = [];
 let drawing = false;
@@ -220,46 +237,122 @@ function updateConn(status, statusDetail) {
   connBadge.classList.add(`is-${status || 'disconnected'}`);
 }
 
-socket.on('status', (s) => updateConn(s.status, s.statusDetail));
+function initializeSocket() {
+  if (socket) return;
+  socket = io();
 
-/* ═══════════ أحداث الخادم ═══════════ */
+  socket.on('connect', () => {
+    setAppEnabled(true);
+    el.loginAlert.textContent = '';
+  });
 
-socket.on('state', (s) => {
-  participants = s.participants || [];
-  renderAll();
-  updateConn(s.status, s.statusDetail);
+  socket.on('connect_error', (err) => {
+    el.loginAlert.textContent = 'فشل الاتصال بخادم الوقت الحقيقي. أعد المحاولة لاحقًا.';
+  });
 
-  if (s.winner) {
-    showWinner(s.winner);
-    (s.winnerMessages || []).forEach(addBubble);
-  } else {
-    showList();
+  socket.on('status', (s) => updateConn(s.status, s.statusDetail));
+
+  socket.on('state', (s) => {
+    participants = s.participants || [];
+    renderAll();
+    updateConn(s.status, s.statusDetail);
+
+    if (s.winner) {
+      showWinner(s.winner);
+      (s.winnerMessages || []).forEach(addBubble);
+    } else {
+      showList();
+    }
+  });
+
+  socket.on('participant:add', (p) => {
+    if (drawing) return;
+    if (participants.some((x) => x.id === p.id)) return;
+    addTicket(p);
+  });
+
+  socket.on('participants:clear', () => {
+    participants = [];
+    renderAll();
+  });
+
+  socket.on('winner', ({ winner, participants: list }) => {
+    pendingParticipants = list;
+    runDraw(winner);
+  });
+
+  socket.on('draw:empty', () => {
+    drawing = false;
+    refreshCounter();
+  });
+
+  socket.on('winner:clear', showList);
+  socket.on('winner:message', addBubble);
+}
+
+async function checkAuthStatus() {
+  try {
+    const response = await fetch('/auth/status');
+    const data = await response.json();
+    if (data.authenticated) {
+      authState.authenticated = true;
+      authState.username = data.user.username;
+      el.loginScreen.hidden = true;
+      el.stageMain.hidden = false;
+      setAppEnabled(true);
+      initializeSocket();
+      return;
+    }
+  } catch (error) {
+    console.error(error);
   }
-});
 
-socket.on('participant:add', (p) => {
-  if (drawing) return;
-  if (participants.some((x) => x.id === p.id)) return;
-  addTicket(p);
-});
+  authState.authenticated = false;
+  el.loginScreen.hidden = false;
+  el.stageMain.hidden = true;
+  el.stageWinner.hidden = true;
+  el.loginAlert.textContent = '';
+  el.loginUsername.focus();
+}
 
-socket.on('participants:clear', () => {
-  participants = [];
-  renderAll();
-});
+async function handleLogin(event) {
+  event.preventDefault();
+  el.loginAlert.textContent = '';
+  const username = el.loginUsername.value.trim();
+  const password = el.loginPassword.value;
 
-socket.on('winner', ({ winner, participants: list }) => {
-  pendingParticipants = list;
-  runDraw(winner);
-});
+  if (!username || !password) {
+    el.loginAlert.textContent = 'يرجى إدخال اسم المستخدم وكلمة المرور.';
+    return;
+  }
 
-socket.on('draw:empty', () => {
-  drawing = false;
-  refreshCounter();
-});
+  el.loginBtn.disabled = true;
+  try {
+    const response = await fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      el.loginAlert.textContent = data.message || 'فشل تسجيل الدخول. حاول مرة أخرى.';
+      el.loginBtn.disabled = false;
+      return;
+    }
 
-socket.on('winner:clear', showList);
-socket.on('winner:message', addBubble);
+    authState.authenticated = true;
+    authState.username = username;
+    el.loginScreen.hidden = true;
+    el.stageMain.hidden = false;
+    setAppEnabled(true);
+    initializeSocket();
+  } catch (error) {
+    el.loginAlert.textContent = 'حدث خطأ أثناء تسجيل الدخول. تأكد من اتصالك.';
+    console.error(error);
+  } finally {
+    el.loginBtn.disabled = false;
+  }
+}
 
 /* ═══════════ تفاعل المستخدم ═══════════ */
 
@@ -287,20 +380,11 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'Space') { e.preventDefault(); if (!el.btnDraw.disabled) requestDraw(); }
   if (e.key === 'Escape' && !el.stageWinner.hidden) {
     showList();
-    socket.emit('back');
+    if (socket) socket.emit('back');
   }
 });
 
-// إضافة منطق تسجيل الدخول
-const loginScreen = $('login-screen');
-const loginBtn = $('login-btn');
-const usernameInput = $('username');
+el.loginForm.addEventListener('submit', handleLogin);
 
-loginBtn.addEventListener('click', () => {
-    if (usernameInput.value.trim()) {
-        loginScreen.style.display = 'none';
-        console.log(`تم تسجيل الدخول باسم: ${usernameInput.value}`);
-    } else {
-        alert('يرجى إدخال اسم المستخدم');
-    }
-});
+setAppEnabled(false);
+checkAuthStatus();

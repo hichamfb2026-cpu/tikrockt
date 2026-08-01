@@ -2,14 +2,20 @@
 
 require('dotenv').config();
 
+const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const crypto = require('crypto');
 const express = require('express');
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
 const { Server } = require('socket.io');
 const { TikTokLiveConnection, WebcastEvent, ControlEvent } = require('tiktok-live-connector');
 
 const PORT = process.env.PORT || 3000;
 const SIGN_API_KEY = process.env.SIGN_API_KEY || undefined;
+const SESSION_SECRET = process.env.SESSION_SECRET || 'change-me-in-env';
+const USERS_PATH = path.join(__dirname, 'users.json');
 
 /* ══════════════════════════════════════════════════════════════
    ★★★  إعداداتك — عدّل هنا فقط  ★★★
@@ -36,6 +42,20 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+app.use(express.json());
+app.use(cookieParser());
+
+const sessionMiddleware = session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 1000 * 60 * 60 * 4,
+    sameSite: 'lax',
+  },
+});
+
+app.use(sessionMiddleware);
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ---------------------------------------------------------------
@@ -126,6 +146,29 @@ function log(level, message) {
 /* ---------------------------------------------------------------
    استخراج بيانات المستخدم من حدث الشات
 --------------------------------------------------------------- */
+
+function loadUsers() {
+  try {
+    return JSON.parse(fs.readFileSync(USERS_PATH, 'utf8'));
+  } catch (_) {
+    return [];
+  }
+}
+
+const users = loadUsers();
+
+function findUser(username) {
+  return users.find((user) => user.username === String(username || '').trim());
+}
+
+function hashPassword(password, salt) {
+  return crypto.scryptSync(String(password), salt, 64).toString('hex');
+}
+
+function verifyPassword(password, user) {
+  if (!user || !user.salt || !user.hash) return false;
+  return hashPassword(password, user.salt) === user.hash;
+}
 
 function readUser(user) {
   if (!user) return null;
@@ -295,6 +338,29 @@ function stopConnection() {
   log('info', 'تم إيقاف الاتصال.');
 }
 
+app.post('/login', (req, res) => {
+  const username = String(req.body.username || '').trim();
+  const password = String(req.body.password || '');
+  const user = findUser(username);
+
+  if (!user || !verifyPassword(password, user)) {
+    return res.status(401).json({ ok: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة.' });
+  }
+
+  req.session.user = { username: user.username };
+  return res.json({ ok: true, user: req.session.user });
+});
+
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.json({ ok: true });
+  });
+});
+
+app.get('/auth/status', (req, res) => {
+  res.json({ authenticated: Boolean(req.session?.user), user: req.session?.user || null });
+});
+
 /* ---------------------------------------------------------------
    معالجة كل رسالة شات
 --------------------------------------------------------------- */
@@ -399,6 +465,16 @@ app.get('/api/participants.csv', (req, res) => {
 /* ---------------------------------------------------------------
    قناة الوقت الفعلي
 --------------------------------------------------------------- */
+
+io.use((socket, next) => {
+  sessionMiddleware(socket.request, socket.request.res || {}, (err) => {
+    if (err) return next(err);
+    if (socket.request.session?.user) {
+      return next();
+    }
+    return next(new Error('unauthorized'));
+  });
+});
 
 io.on('connection', (socket) => {
   socket.emit('state', snapshot());

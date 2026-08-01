@@ -18,8 +18,29 @@
   <span id="conn-text">—</span>
 </div>
 
+<div class="login-screen" id="login-screen">
+  <div class="login-panel">
+    <h1 class="login-panel__title">مرحبًا بك في صاروخ الحظ</h1>
+    <p class="login-panel__hint">سجّل الدخول للوصول إلى واجهة التحكم بالسحب.</p>
+    <div class="login-panel__error" id="login-alert"></div>
+    <form class="login-panel__form" id="login-form">
+      <div class="login-field">
+        <label for="login-username">اسم المستخدم</label>
+        <input id="login-username" name="username" type="text" autocomplete="username" required>
+      </div>
+      <div class="login-field">
+        <label for="login-password">كلمة المرور</label>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <div class="login-actions">
+        <button class="btn btn--go" id="login-btn" type="submit">دخول</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- ══ الشاشة الرئيسية ══ -->
-<main class="stage" id="stage-main">
+<main class="stage" id="stage-main" hidden>
 
   <section class="wall">
     <header class="wall__head">
