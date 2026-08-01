@@ -148,6 +148,23 @@ function readUser(user) {
   };
 }
 
+function getChatText(event) {
+  const value =
+    event?.comment ??
+    event?.content ??
+    event?.message ??
+    event?.text ??
+    event?.commentText ??
+    event?.messageText ??
+    event?.msg ??
+    '';
+
+  if (typeof value === 'string') return value;
+  if (value && typeof value.text === 'string') return value.text;
+  if (value && typeof value.content === 'string') return value.content;
+  return '';
+}
+
 /* ---------------------------------------------------------------
    الاتصال بالبث
 --------------------------------------------------------------- */
@@ -307,7 +324,7 @@ function stopConnection() {
 function onChat(event) {
   const user = readUser(event?.user);
   if (!user) return;
-  const content = event?.comment ?? event?.content ?? event?.message ?? '';
+  const content = getChatText(event);
 
   // رسائل الفائز الحالي تُبثّ إلى شاشة المتابعة
   if (state.winner && state.winner.id === user.id) {
@@ -441,6 +458,10 @@ io.on('connection', (socket) => {
     io.emit('history:clear');
     log('info', 'تم مسح سجل الفائزين وإعادة تأهيل الجميع.');
   });
+
+  if (!connection && ACCOUNTS[0]) {
+    startConnection(ACCOUNTS[0]);
+  }
 
   // وضع التجربة: يولّد مشاركين وهميين لاختبار الواجهة بدون بث حقيقي
   socket.on('demo', (payload = {}) => {
