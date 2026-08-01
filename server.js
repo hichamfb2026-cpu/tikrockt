@@ -15,6 +15,10 @@ const { TikTokLiveConnection, WebcastEvent, ControlEvent } = require('tiktok-liv
 const PORT = process.env.PORT || 3000;
 const SIGN_API_KEY = process.env.SIGN_API_KEY || undefined;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'change-me-in-env';
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const MODERATOR_USERNAME = process.env.MODERATOR_USERNAME || 'moderator';
+const MODERATOR_PASSWORD = process.env.MODERATOR_PASSWORD || 'drawpass';
 const USERS_PATH = path.join(__dirname, 'users.json');
 
 /* ══════════════════════════════════════════════════════════════
@@ -149,16 +153,26 @@ function log(level, message) {
 
 function loadUsers() {
   try {
-    return JSON.parse(fs.readFileSync(USERS_PATH, 'utf8'));
-  } catch (_) {
+    const loaded = JSON.parse(fs.readFileSync(USERS_PATH, 'utf8'));
+    if (!Array.isArray(loaded)) return [];
+    return loaded;
+  } catch (err) {
+    log('warn', `تعذّر قراءة users.json: ${err.message || err}. سيتم استخدام بيانات الدخول الافتراضية.`);
     return [];
   }
 }
 
 const users = loadUsers();
+const fallbackUsers = [
+  { username: ADMIN_USERNAME, password: ADMIN_PASSWORD },
+  { username: MODERATOR_USERNAME, password: MODERATOR_PASSWORD },
+];
 
 function findUser(username) {
-  return users.find((user) => user.username === String(username || '').trim());
+  const trimmed = String(username || '').trim();
+  const fileUser = users.find((user) => user.username === trimmed);
+  if (fileUser) return fileUser;
+  return fallbackUsers.find((user) => user.username === trimmed) || null;
 }
 
 function hashPassword(password, salt) {
