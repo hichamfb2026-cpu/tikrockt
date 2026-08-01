@@ -7,19 +7,11 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const express = require('express');
-const session = require('express-session');
-const cookieParser = require('cookie-parser');
 const { Server } = require('socket.io');
 const { TikTokLiveConnection, WebcastEvent, ControlEvent } = require('tiktok-live-connector');
 
 const PORT = process.env.PORT || 3000;
 const SIGN_API_KEY = process.env.SIGN_API_KEY || undefined;
-const SESSION_SECRET = process.env.SESSION_SECRET || 'change-me-in-env';
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
-const MODERATOR_USERNAME = process.env.MODERATOR_USERNAME || 'moderator';
-const MODERATOR_PASSWORD = process.env.MODERATOR_PASSWORD || 'drawpass';
-const USERS_PATH = path.join(__dirname, 'users.json');
 
 /* ══════════════════════════════════════════════════════════════
    ★★★  إعداداتك — عدّل هنا فقط  ★★★
@@ -47,19 +39,6 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.json());
-app.use(cookieParser());
-
-const sessionMiddleware = session({
-  secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    maxAge: 1000 * 60 * 60 * 4,
-    sameSite: 'lax',
-  },
-});
-
-app.use(sessionMiddleware);
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ---------------------------------------------------------------
@@ -151,42 +130,10 @@ function log(level, message) {
    استخراج بيانات المستخدم من حدث الشات
 --------------------------------------------------------------- */
 
-function loadUsers() {
-  try {
-    const loaded = JSON.parse(fs.readFileSync(USERS_PATH, 'utf8'));
-    if (!Array.isArray(loaded)) return [];
-    return loaded;
-  } catch (err) {
-    log('warn', `تعذّر قراءة users.json: ${err.message || err}. سيتم استخدام بيانات الدخول الافتراضية.`);
-    return [];
-  }
-}
-
-const users = loadUsers();
-const fallbackUsers = [
-  { username: ADMIN_USERNAME, password: ADMIN_PASSWORD },
-  { username: MODERATOR_USERNAME, password: MODERATOR_PASSWORD },
-];
-
-function findUser(username) {
-  const trimmed = String(username || '').trim();
-  const fileUser = users.find((user) => user.username === trimmed);
-  if (fileUser) return fileUser;
-  return fallbackUsers.find((user) => user.username === trimmed) || null;
-}
-
-function hashPassword(password, salt) {
-  return crypto.scryptSync(String(password), salt, 64).toString('hex');
-}
-
-function verifyPassword(password, user) {
-  if (!user || !user.salt || !user.hash) return false;
-  return hashPassword(password, user.salt) === user.hash;
-}
 
 function readUser(user) {
   if (!user) return null;
-  const id = String(user.id || user.displayId || '');
+  const id = String(user?.uniqueId || user?.displayId || user?.userId || user?.id || '');
   if (!id) return null;
   const avatar =
     user.avatarThumb?.urlList?.[0] ||
@@ -195,8 +142,8 @@ function readUser(user) {
     '';
   return {
     id,
-    handle: user.displayId || '',
-    name: user.nickname || user.displayId || 'مشارك',
+    handle: user.uniqueId || user.displayId || user.userId || '',
+    name: user.nickname || user.uniqueId || user.displayId || 'مشارك',
     avatar,
   };
 }
@@ -211,9 +158,9 @@ async function startConnection(rawUsername) {
     return;
   }
 
-  const username = String(rawUsername || '').trim().replace(/^@/, '');
+  const username = String(rawUsername || state.username || ACCOUNTS[0] || '').trim().replace(/^@/, '');
   if (!username) {
-    log('error', 'اكتب اسم مستخدم تيك توك أولًا.');
+    log('error', 'اكتب اسم مستخدم تيك توك أولًا أو اضبط الحساب في ACCOUNTS.');
     return;
   }
 
@@ -352,28 +299,6 @@ function stopConnection() {
   log('info', 'تم إيقاف الاتصال.');
 }
 
-app.post('/login', (req, res) => {
-  const username = String(req.body.username || '').trim();
-  const password = String(req.body.password || '');
-  const user = findUser(username);
-
-  if (!user || !verifyPassword(password, user)) {
-    return res.status(401).json({ ok: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة.' });
-  }
-
-  req.session.user = { username: user.username };
-  return res.json({ ok: true, user: req.session.user });
-});
-
-app.post('/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.json({ ok: true });
-  });
-});
-
-app.get('/auth/status', (req, res) => {
-  res.json({ authenticated: Boolean(req.session?.user), user: req.session?.user || null });
-});
 
 /* ---------------------------------------------------------------
    معالجة كل رسالة شات
@@ -382,7 +307,7 @@ app.get('/auth/status', (req, res) => {
 function onChat(event) {
   const user = readUser(event?.user);
   if (!user) return;
-  const content = event?.content || '';
+  const content = event?.comment ?? event?.content ?? event?.message ?? '';
 
   // رسائل الفائز الحالي تُبثّ إلى شاشة المتابعة
   if (state.winner && state.winner.id === user.id) {
@@ -480,15 +405,7 @@ app.get('/api/participants.csv', (req, res) => {
    قناة الوقت الفعلي
 --------------------------------------------------------------- */
 
-io.use((socket, next) => {
-  sessionMiddleware(socket.request, socket.request.res || {}, (err) => {
-    if (err) return next(err);
-    if (socket.request.session?.user) {
-      return next();
-    }
-    return next(new Error('unauthorized'));
-  });
-});
+// السماح بكل اتصالات WebSocket بدون مصادقة
 
 io.on('connection', (socket) => {
   socket.emit('state', snapshot());

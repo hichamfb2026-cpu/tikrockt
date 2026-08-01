@@ -1,6 +1,7 @@
 'use strict';
 
 let socket = null;
+let socketStarted = false;
 const $ = (id) => document.getElementById(id);
 
 const el = {
@@ -18,18 +19,8 @@ const el = {
   btnDraw: $('btn-draw'),
   btnRedraw: $('btn-redraw'),
   btnBack: $('btn-back'),
-  loginScreen: $('login-screen'),
-  loginForm: $('login-form'),
-  loginBtn: $('login-btn'),
-  loginUsername: $('login-username'),
-  loginPassword: $('login-password'),
-  loginAlert: $('login-alert'),
 };
 
-const authState = {
-  authenticated: false,
-  username: '',
-};
 
 function setAppEnabled(enabled) {
   el.btnDraw.disabled = !enabled || participants.length === 0 || drawing;
@@ -243,11 +234,14 @@ function initializeSocket() {
 
   socket.on('connect', () => {
     setAppEnabled(true);
-    el.loginAlert.textContent = '';
+    if (!socketStarted) {
+      socketStarted = true;
+      socket.emit('start', { username: '' });
+    }
   });
 
   socket.on('connect_error', (err) => {
-    el.loginAlert.textContent = 'فشل الاتصال بخادم الوقت الحقيقي. أعد المحاولة لاحقًا.';
+    console.error('WebSocket connection failed:', err);
   });
 
   socket.on('status', (s) => updateConn(s.status, s.statusDetail));
@@ -290,68 +284,8 @@ function initializeSocket() {
   socket.on('winner:message', addBubble);
 }
 
-async function checkAuthStatus() {
-  try {
-    const response = await fetch('/auth/status');
-    const data = await response.json();
-    if (data.authenticated) {
-      authState.authenticated = true;
-      authState.username = data.user.username;
-      el.loginScreen.hidden = true;
-      el.stageMain.hidden = false;
-      setAppEnabled(true);
-      initializeSocket();
-      return;
-    }
-  } catch (error) {
-    console.error(error);
-  }
-
-  authState.authenticated = false;
-  el.loginScreen.hidden = false;
-  el.stageMain.hidden = true;
-  el.stageWinner.hidden = true;
-  el.loginAlert.textContent = '';
-  el.loginUsername.focus();
-}
-
-async function handleLogin(event) {
-  event.preventDefault();
-  el.loginAlert.textContent = '';
-  const username = el.loginUsername.value.trim();
-  const password = el.loginPassword.value;
-
-  if (!username || !password) {
-    el.loginAlert.textContent = 'يرجى إدخال اسم المستخدم وكلمة المرور.';
-    return;
-  }
-
-  el.loginBtn.disabled = true;
-  try {
-    const response = await fetch('/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    const data = await response.json();
-    if (!response.ok || !data.ok) {
-      el.loginAlert.textContent = data.message || 'فشل تسجيل الدخول. حاول مرة أخرى.';
-      el.loginBtn.disabled = false;
-      return;
-    }
-
-    authState.authenticated = true;
-    authState.username = username;
-    el.loginScreen.hidden = true;
-    el.stageMain.hidden = false;
-    setAppEnabled(true);
-    initializeSocket();
-  } catch (error) {
-    el.loginAlert.textContent = 'حدث خطأ أثناء تسجيل الدخول. تأكد من اتصالك.';
-    console.error(error);
-  } finally {
-    el.loginBtn.disabled = false;
-  }
+function initializeApp() {
+  initializeSocket();
 }
 
 /* ═══════════ تفاعل المستخدم ═══════════ */
@@ -384,7 +318,5 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-el.loginForm.addEventListener('submit', handleLogin);
-
 setAppEnabled(false);
-checkAuthStatus();
+initializeApp();
